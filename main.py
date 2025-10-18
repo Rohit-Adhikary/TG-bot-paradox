@@ -9,16 +9,8 @@ import json
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Store user sessions
-user_sessions = {}
-
-class UserSession:
-    def __init__(self):
-        self.language = None
-        self.history = []
-
-# Programming languages
-LANGUAGES = ["Python", "JavaScript", "Java", "C++", "HTML/CSS", "SQL"]
+# Store user data
+user_data = {}
 
 class DeepSeekAPI:
     def __init__(self):
@@ -31,7 +23,7 @@ class DeepSeekAPI:
 
     def get_response(self, message, language=None):
         try:
-            system_msg = f"You are a {language} expert programmer." if language else "You are a helpful AI assistant."
+            system_msg = f"You are a {language} programming expert." if language else "You are a helpful AI assistant."
             
             data = {
                 "model": "deepseek-chat",
@@ -47,25 +39,25 @@ class DeepSeekAPI:
             if response.status_code == 200:
                 return response.json()['choices'][0]['message']['content']
             else:
-                return "Sorry, API error. Please try again."
+                return "⚠️ Service temporarily unavailable. Please try again."
                 
         except Exception as e:
-            return "Sorry, service unavailable. Try again later."
+            return "❌ Error connecting to AI service. Please try again later."
 
+# Initialize API
 deepseek = DeepSeekAPI()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_sessions[user_id] = UserSession()
+    user_data[user_id] = {"language": None}
     
     keyboard = [
         [InlineKeyboardButton("💻 Coding Mode", callback_data="coding")],
-        [InlineKeyboardButton("💬 General Chat", callback_data="general")],
-        [InlineKeyboardButton("🛠️ Help", callback_data="help")]
+        [InlineKeyboardButton("💬 General Chat", callback_data="general")]
     ]
     
     await update.message.reply_text(
-        "🤖 **DeepSeek Bot**\nChoose mode:",
+        "🤖 **DeepSeek Coding Assistant**\n\nChoose your mode:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -75,105 +67,105 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = query.from_user.id
     
-    if user_id not in user_sessions:
-        user_sessions[user_id] = UserSession()
+    if user_id not in user_data:
+        user_data[user_id] = {"language": None}
     
     if query.data == "coding":
-        # Show language buttons
+        # Language selection
+        languages = ["Python", "JavaScript", "Java", "C++", "HTML/CSS", "SQL"]
         keyboard = []
-        for lang in LANGUAGES:
+        for lang in languages:
             keyboard.append([InlineKeyboardButton(lang, callback_data=f"lang_{lang}")])
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back")])
         
         await query.edit_message_text(
-            "Select programming language:",
+            "🖥️ **Select Programming Language:**",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
     elif query.data == "general":
-        user_sessions[user_id].language = None
-        await query.edit_message_text("💬 **General Chat Mode**\nAsk me anything!")
-    
-    elif query.data == "help":
-        help_text = """
-**Commands:**
-/start - Start bot
-/clear - Clear history
-/language - Select language
-
-**Tips:**
-- Be specific with questions
-- Use /clear to reset chat
-        """
-        await query.edit_message_text(help_text, parse_mode='Markdown')
+        user_data[user_id]["language"] = None
+        await query.edit_message_text(
+            "💬 **General Chat Mode**\n\nYou can now ask me anything!"
+        )
     
     elif query.data == "back":
         await start(update, context)
     
     elif query.data.startswith("lang_"):
         language = query.data[5:]
-        user_sessions[user_id].language = language
-        await query.edit_message_text(f"✅ **{language} Mode**\nStart coding!")
+        user_data[user_id]["language"] = language
+        await query.edit_message_text(
+            f"✅ **{language} Mode Activated**\n\nYou can now send your code or programming questions!"
+        )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id not in user_sessions:
-        user_sessions[user_id] = UserSession()
+    if user_id not in user_data:
+        user_data[user_id] = {"language": None}
     
     user_msg = update.message.text
-    session = user_sessions[user_id]
     
+    # Show typing indicator
     await update.message.chat.send_action(action="typing")
     
+    # Get user language
+    language = user_data[user_id]["language"]
+    
     # Get AI response
-    response = deepseek.get_response(user_msg, session.language)
+    response = deepseek.get_response(user_msg, language)
     
     # Send response
-    if len(response) > 4000:
-        parts = [response[i:i+4000] for i in range(0, len(response), 4000)]
-        for part in parts:
-            await update.message.reply_text(part)
-    else:
-        await update.message.reply_text(response)
+    await update.message.reply_text(response)
 
-async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id in user_sessions:
-        user_sessions[user_id].history = []
-    await update.message.reply_text("✅ History cleared!")
+    if user_id in user_data:
+        user_data[user_id]["language"] = None
+    await update.message.reply_text("🔄 Session cleared! Use /start to begin again.")
 
-async def show_languages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in user_sessions:
-        user_sessions[user_id] = UserSession()
-    
-    keyboard = []
-    for lang in LANGUAGES:
-        keyboard.append([InlineKeyboardButton(lang, callback_data=f"lang_{lang}")])
-    
-    await update.message.reply_text(
-        "Select language:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = """
+🤖 **DeepSeek Bot Help**
+
+**Commands:**
+/start - Start the bot
+/clear - Clear session
+/help - Show this help
+
+**Features:**
+- Code assistance in multiple languages
+- General AI conversations
+- Simple and fast responses
+
+**How to use:**
+1. Click /start
+2. Choose coding or general mode
+3. If coding, select your language
+4. Start asking questions!
+    """
+    await update.message.reply_text(help_text)
 
 def main():
+    # Get bot token
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
     if not bot_token:
-        print("Error: TELEGRAM_BOT_TOKEN not found!")
+        print("❌ ERROR: TELEGRAM_BOT_TOKEN not found!")
         return
     
-    app = Application.builder().token(bot_token).build()
+    # Create application
+    application = Application.builder().token(bot_token).build()
     
     # Add handlers
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("clear", clear_history))
-    app.add_handler(CommandHandler("language", show_languages))
-    app.add_handler(CallbackQueryHandler(handle_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("clear", clear_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     # Start bot
-    print("🤖 Bot is running...")
-    app.run_polling()
+    print("✅ Bot started successfully!")
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
