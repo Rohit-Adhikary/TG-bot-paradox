@@ -2,6 +2,7 @@ import os
 import aiohttp
 import json
 import logging
+import asyncio
 from typing import List, Dict
 
 logger = logging.getLogger(__name__)
